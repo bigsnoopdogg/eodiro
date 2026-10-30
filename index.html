@@ -319,10 +319,14 @@ footer strong{color:var(--ink)}
       <select id="plDays"><option value="1">당일치기</option><option value="2">1박 2일</option></select>
     </div>
     <div class="field">
+      <label for="plPace">일정 강도</label>
+      <select id="plPace"><option value="relax">느긋한 일정</option><option value="tight">타이트한 일정</option></select>
+    </div>
+    <div class="field">
       <label for="plStart">출발 시간</label>
       <input type="time" id="plStart" value="09:00" step="600">
     </div>
-    <div class="field" style="justify-content:flex-end">
+    <div class="field wide">
       <button type="button" class="pl-main" id="plMake">코스 만들기</button>
     </div>
     <p class="pl-hint wide">지역을 고르면 대표 장소를 메인으로 잡아요. 카드의 <b>코스 짜기</b>를 누르면 그곳이 메인이 돼요. 출발지·아이 나이·동행 조건은 위쪽 검색 조건을 따라요.</p>
@@ -533,6 +537,14 @@ $("q").oninput=e=>update(()=>{S.q=e.target.value});
    이동 시간은 직선거리×1.35 를 시내 28km/h, 시외 55km/h 로 어림한 값. */
 const BYID=new Map();P.forEach(p=>{if(!BYID.has(p.id))BYID.set(p.id,p)});
 const STAY={museum:90,exp:90,park:120,nature:60,sight:50,fest:120,event:90,show:120,food:60};
+// 일정 강도. 느긋: 머무는 시간 1.3배, 볼거리 수↓, 일찍 마무리 / 타이트: 예전(기본) 방식 그대로
+// 느긋은 하루 볼거리를 메인 포함 3곳 안팎으로 줄이고 머무는 시간을 늘린다
+// k 체류 배수 · main 메인 추가 체류 · meal/cafe 식사·카페 분 · near 날짜별 근처 볼거리 최대 수
+// lim 첫날(당일/1박)·둘째 날 마지막 볼거리 마칠 시각 · back 돌아오는 길 경유지 한도 · home 귀가 한도 · route 경유지 넣는 최소 거리
+const PACE={
+  relax:{name:"느긋",k:1.3,main:40,meal:80,cafe:60,cap:60,near:[2,2],lim:["16:30","17:00","14:00"],back:"15:00",home:"19:30",night:"20:00",route:50,day2:"10:00"},
+  tight:{name:"타이트",k:1,main:30,meal:60,cafe:40,cap:50,near:[4,3],lim:["16:30","17:00","14:30"],back:"16:00",home:"21:00",night:"23:00",route:30,day2:"09:30"}};
+const pace=()=>PACE[PL.pace]||PACE.relax;
 const FAMILY=new Set(["테마파크","워터파크","동물원","수족관 / 아쿠라리움","천문대","과학관","박물관","수목원ㆍ정원","시민공원","어린이공원","주제공원","해변. 해수욕장","체험마을","체험농장","체험목장","체험어장","생태관광지","자연휴양림","전시관","미술관/화랑","유람선/잠수함관광","전통문화체험","기타체험관광"]);
 const NOSTOP=/골프|경마|경륜|수렵|사격|카지노|사우나|스파|의료관광|찜질방|야영장|캠핑장|카라반|글램핑|컨벤션|연회장|도서관|학교|어학당|스포츠센터|스포츠경기|영화관/;
 const CAFE=/카페|찻집|제과|음료/;
@@ -614,9 +626,11 @@ function addSlot(d,k,cands,at){
 function timeline(){
   const out=[],ends=[],main=BYID.get(PL.main),O=origin();
   for(let d=0;d<PL.days;d++){
-    let t=d===0?toMin(PL.start):toMin("09:30"),pos=d===0?O:main;
+    const G=pace();
+    let t=d===0?toMin(PL.start):toMin(G.day2),pos=d===0?O:main;
     PL.slots.forEach((s,i)=>{if(s.d!==d)return;const p=cur(s),km_=dist(pos,p),mv=travel(km_);t+=mv;
-      const st=s.k==="lunch"||s.k==="dinner"?60:s.k==="cafe"?40:s.k==="route"||s.k==="back"?Math.min(50,STAY[p.c]||60):(STAY[p.c]||60)+(s.k==="main"?30:0);
+      const base=Math.round((STAY[p.c]||60)*G.k/10)*10;
+      const st=s.k==="lunch"||s.k==="dinner"?G.meal:s.k==="cafe"?G.cafe:s.k==="route"||s.k==="back"?Math.min(G.cap,base):base+(s.k==="main"?G.main:0);
       out[i]={arr:t,mv,km:km_,stay:st};t+=st;pos=p});
     const back=d===PL.days-1?O:main,km_=dist(pos,back),mv=travel(km_);
     ends[d]={leave:t,arr:t+mv,mv,km:km_};
@@ -643,34 +657,41 @@ function addMeals(){
   }
 }
 function buildPlan(mainId){
-  const main=BYID.get(mainId),ds=planDs(),O=origin(),L=dist(O,main);
+  const main=BYID.get(mainId),ds=planDs(),O=origin(),L=dist(O,main),G=pace();
   PL.main=mainId;PL.slots=[];
-  if(L>30)addSlot(0,"route",corridorPool(O,main,ds));
+  if(L>G.route)addSlot(0,"route",corridorPool(O,main,ds));
   PL.slots.push({d:0,k:"main",cands:[mainId],i:0});
   // 식사 빼고 이 시각 안에 마지막 볼거리를 마치도록 채운다 (식사·카페가 뒤에 1~2시간 붙는다)
   const fill=(d,pool,max,limit)=>{for(let k=0;k<max;k++){
     if(!addSlot(d,"near",pool))break;
     if(timeline().ends[d].leave>limit){PL.slots.splice(lastOfDay(d),1);break}}};
   let pool=nearPool(main,ds,12);if(pool.length<10)pool=nearPool(main,ds,25);
-  fill(0,pool,4,PL.days>1?toMin("17:00"):toMin("16:30"));
+  fill(0,pool,G.near[0],toMin(G.lim[PL.days>1?1:0]));
   if(PL.days>1){
-    fill(1,nearPool(main,planDs(1),25),3,toMin("14:30"));
-    if(L>30&&addSlot(1,"back",corridorPool(main,O,planDs(1)))&&timeline().ends[1].leave>toMin("16:00"))PL.slots.splice(lastOfDay(1),1);
+    fill(1,nearPool(main,planDs(1),25),G.near[1],toMin(G.lim[2]));
+    if(L>G.route&&addSlot(1,"back",corridorPool(main,O,planDs(1)))&&timeline().ends[1].leave>toMin(G.back))PL.slots.splice(lastOfDay(1),1);
   }
   addMeals();
-  // 마지막 날 귀가가 21시를 넘으면 (당일) 저녁 → 카페 → 뒤쪽 '근처' 볼거리 순으로 덜어낸다.
+  // 마지막 날 귀가가 한도(타이트 21시·느긋 20시)를 넘으면 (당일) 저녁 → 카페 → 뒤쪽 '근처' 볼거리 순으로 덜어낸다.
   // 볼거리를 뺐으면 식사 위치·시간이 어긋나니 식사를 다시 짠다.
   const last=PL.days-1,lastIdx=k=>{let j=-1;PL.slots.forEach((s,i)=>{if(s.d===last&&s.k===k)j=i});return j};
-  for(let g=0;g<8&&timeline().ends[last].arr>toMin("21:00");g++){
+  for(let g=0;g<8&&timeline().ends[last].arr>toMin(G.home);g++){
     const dn=PL.days===1?lastIdx("dinner"):-1,cf=lastIdx("cafe");
     if(dn>=0){PL.slots.splice(dn,1);continue}
     if(cf>=0){PL.slots.splice(cf,1);continue}
     const nr=lastIdx("near");if(nr<0)break;
     PL.slots.splice(nr,1);PL.slots=PL.slots.filter(s=>!MEAL.has(s.k));addMeals();
   }
+  // 1박 첫날도 숙소 도착이 한도(느긋 20시)를 넘으면 카페 → 근처 볼거리 순으로 덜어낸다
+  const lastOf=(d,k)=>{let j=-1;PL.slots.forEach((s,i)=>{if(s.d===d&&s.k===k)j=i});return j};
+  for(let g=0;g<6&&PL.days>1&&timeline().ends[0].arr>toMin(G.night);g++){
+    const cf=lastOf(0,"cafe");if(cf>=0){PL.slots.splice(cf,1);continue}
+    const nr=lastOf(0,"near");if(nr<0)break;
+    PL.slots.splice(nr,1);PL.slots=PL.slots.filter(s=>!MEAL.has(s.k));addMeals();
+  }
 }
 function readForm(){
-  PL.date=$("plDate").value||nextSat();PL.days=+$("plDays").value||1;PL.start=$("plStart").value||"09:00";PL.from=S.from;
+  PL.date=$("plDate").value||nextSat();PL.days=+$("plDays").value||1;PL.start=$("plStart").value||"09:00";PL.pace=$("plPace").value||"relax";PL.from=S.from;
 }
 function planFromCard(id,rebuild){
   const p=BYID.get(id);if(!p)return;
@@ -712,10 +733,10 @@ function openPlanner(on){$("planner").hidden=!on;$("planFab").setAttribute("aria
 function dateLabel(d){const x=new Date((PL.date||nextSat())+"T00:00");x.setDate(x.getDate()+d);return`${x.getMonth()+1}월 ${x.getDate()}일 (${WD[x.getDay()]})`}
 function planText(){
   const{out,ends}=timeline(),main=BYID.get(PL.main),lines=[];
-  lines.push(`[어디로 떠날까] ${dateLabel(0)} ${main.r} ${PL.days>1?"1박 2일":"당일"} 코스`);
+  lines.push(`[어디로 떠날까] ${dateLabel(0)} ${main.r} ${PL.days>1?"1박 2일":"당일"} 코스 (${pace().name})`);
   for(let d=0;d<PL.days;d++){
     if(PL.days>1)lines.push("",`■ ${d+1}일차 ${dateLabel(d)}`);
-    lines.push(`${d===0?PL.start:"09:30"} ${d===0?(PL.from||S.from)+" 출발":"숙소 출발"}`);
+    lines.push(`${d===0?PL.start:pace().day2} ${d===0?(PL.from||S.from)+" 출발":"숙소 출발"}`);
     PL.slots.forEach((s,i)=>{if(s.d!==d)return;const p=cur(s);
       if(MEAL.has(s.k)){const alt=ensureOpts(s,i).filter(id=>id!==s.cands[s.i]).map(id=>{const q=BYID.get(id);return`${q.n}(${menu(q)})`});
         lines.push(`${hm(out[i].arr)} ${KIND[s.k]}: ${p.n}(${menu(p)})${alt.length?" / 또는 "+alt.join(", "):""}`);return}
@@ -737,7 +758,7 @@ function renderPlan(){
   if(!$("plRegion").options.length)$("plRegion").innerHTML='<option value="">지역 선택</option>'+regionOpts();
   $("plDate").min=$("day").min;
   if(document.activeElement?.closest?.("#planner .pl-form")==null){
-    $("plDate").value=PL.date||nextSat();$("plDays").value=PL.days||1;$("plStart").value=PL.start||"09:00";
+    $("plDate").value=PL.date||nextSat();$("plDays").value=PL.days||1;$("plStart").value=PL.start||"09:00";$("plPace").value=PL.pace||"relax";
     if(PL.main&&BYID.get(PL.main))$("plRegion").value=BYID.get(PL.main).r;
   }
   if($("planner").hidden)return;
@@ -747,10 +768,10 @@ function renderPlan(){
   }
   const{out,ends}=timeline(),main=BYID.get(PL.main),O=origin();
   const total=PL.slots.filter(s=>!MEAL.has(s.k)).length;
-  let h=`<div class="pl-sum"><b>${esc(main.r)} ${PL.days>1?"1박 2일":"당일치기"} · ${esc(main.n)}</b><span>${dateLabel(0)} · ${esc(PL.from||S.from)} 출발 · 볼거리 ${total}곳 · 메인까지 약 ${Math.round(dist(O,main))}km</span></div>`;
+  let h=`<div class="pl-sum"><b>${esc(main.r)} ${PL.days>1?"1박 2일":"당일치기"} · ${pace().name} · ${esc(main.n)}</b><span>${dateLabel(0)} · ${esc(PL.from||S.from)} 출발 · 볼거리 ${total}곳 · 메인까지 약 ${Math.round(dist(O,main))}km</span></div>`;
   for(let d=0;d<PL.days;d++){
     h+=`<div class="pl-day">${PL.days>1?`${d+1}일차 · `:""}${dateLabel(d)}</div><ol class="tl">`;
-    h+=`<li class="edge"><time>${d===0?esc(PL.start):"09:30"}</time><div class="what"><b>${d===0?esc(PL.from||S.from)+" 출발":"숙소 출발"}</b></div></li>`;
+    h+=`<li class="edge"><time>${d===0?esc(PL.start):pace().day2}</time><div class="what"><b>${d===0?esc(PL.from||S.from)+" 출발":"숙소 출발"}</b></div></li>`;
     PL.slots.forEach((s,i)=>{if(s.d!==d)return;const p=cur(s),o=out[i];
       const ev=p.st?`${fmtD(p.st)}~${fmtD(p.en)} 진행`:"";
       if(MEAL.has(s.k)){
@@ -803,7 +824,7 @@ function ensureOpts(s,i){
   return s.opts;
 }
 function pickMeal(i,id){const s=PL.slots[i];if(!s)return;const k=s.cands.indexOf(id);if(k<0)return;s.i=k;savePlan();renderPlan()}
-["plDays","plStart","plDate"].forEach(id=>$(id).onchange=()=>{if(!PL.slots.length)return;readForm();if(id==="plStart"){savePlan();renderPlan()}else planFromCard(PL.main,true)});
+["plDays","plPace","plStart","plDate"].forEach(id=>$(id).onchange=()=>{if(!PL.slots.length)return;readForm();if(id==="plStart"){savePlan();renderPlan()}else planFromCard(PL.main,true)});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("planner").hidden)openPlanner(false)});
 renderPlan();
 render();
