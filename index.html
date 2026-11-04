@@ -485,6 +485,8 @@ function dday(p){
   return d<=30?`<span class="chip now">D-${d}</span>`:"";
 }
 
+// 네이버 지도 장소 검색어. 이름만으로 검색하면 같은 이름의 다른 곳이 걸려서 시·도와 시·군·구를 붙인다.
+const placeQ=p=>`${p.p} ${short(p.r)} ${p.n.replace(/\s*[(\[].*?[)\]]\s*/g," ").trim()}`;
 function card(p){
   const fav=S.favs.includes(p.id);
   const io=p.io===1?"실내":p.io===2?"실내+실외":p.io===0?"실외":"";
@@ -513,7 +515,8 @@ function card(p){
     <div class="links">
       <a href="https://map.naver.com/p/search/${encodeURIComponent((p.a||p.r)+" "+p.n)}" target="_blank" rel="noopener">지도 보기</a>
       ${hp?`<a href="${esc(hp)}" target="_blank" rel="noopener">공식 홈페이지</a>`:""}
-      <a href="https://search.naver.com/search.naver?query=${encodeURIComponent(p.n+(isDated(p)?" "+TODAY.getFullYear()+" 일정":" 운영시간 요금"))}" target="_blank" rel="noopener">${isDated(p)?"일정 확인":"요금·운영 확인"}</a>
+      ${isDated(p)?`<a href="https://search.naver.com/search.naver?query=${encodeURIComponent(p.n+" "+TODAY.getFullYear()+" 일정")}" target="_blank" rel="noopener">일정 확인</a>`
+        :`<a href="https://map.naver.com/p/search/${encodeURIComponent(placeQ(p))}" target="_blank" rel="noopener">${p.c==="food"?"메뉴·영업시간":"운영시간·요금"}</a>`}
       <button type="button" class="linkbtn" data-plan="${esc(p.id)}">${PL.slots.length?(inPlan(p.id)?"코스에 있음":"코스에 추가"):"코스 짜기"}</button>
     </div>
     </div>
