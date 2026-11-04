@@ -442,7 +442,13 @@ const THEMES=[
   {id:"warm",label:"🧤 따뜻한 실내 체험",mo:[12,1,2],test:p=>p.io===1&&(p.c==="museum"||p.c==="exp")&&(p.rec||FAMILY.has(p.s))},
   {id:"cherry",label:"🌸 벚꽃",mo:[3,4],rx:/벚꽃|벚나무|군항제|여좌천|경화역|삼락생태|맥도생태|온천천|달맞이/},
   {id:"flower",label:"🌷 봄꽃·정원",mo:[4,5,6],sub:/수목원|정원/,rx:/유채|튤립|장미|철쭉|진달래|수국|작약|꽃축제|꽃 축제|라벤더|양귀비|정원/},
-  {id:"water",label:"🏖 물놀이",mo:[6,7,8],sub:/해변\. 해수욕장|워터파크|계곡/,rx:/물놀이|해수욕장|워터파크|수영장|물썰매/}];
+  {id:"water",label:"🏖 물놀이",mo:[6,7,8],sub:/해변\. 해수욕장|워터파크|계곡/,rx:/물놀이|해수욕장|워터파크|수영장|물썰매/},
+  // 휴양림은 계절 상관없이 늘 보인다
+  {id:"forest",label:"🌲 자연휴양림",mo:[1,2,3,4,5,6,7,8,9,10,11,12],sub:/자연휴양림/,rx:/자연휴양림|치유의숲|산림욕장/}];
+// 숙박(객실)이 있는 휴양림만: 수목원·공원처럼 분류만 휴양림인 곳은 뺀다
+const FOREST=p=>p.c!=="food"&&/휴양림|휴양밸리|드림파크/.test(p.n);
+// 빈 방·객실 요금은 숲나들e(국립·공립 휴양림 통합 예약)에서 바로 확인
+const FTRIP="https://www.foresttrip.go.kr/rep/cndtl/cndtlRsrvtMain.do?type=Main&infoFlag=Main&hmpgId=FRIP&menuId=001002001";
 const themeTxt=p=>p.n+" "+(p.s||"")+" "+(p.ds||"")+" "+(p.ov||"");
 function inTheme(p,id){
   const th=THEMES.find(x=>x.id===id);if(!th||p.c==="food")return false;
@@ -533,6 +539,7 @@ function card(p){
     <div class="links">
       <a href="https://map.naver.com/p/search/${encodeURIComponent((p.a||p.r)+" "+p.n)}" target="_blank" rel="noopener">지도 보기</a>
       ${hp?`<a href="${esc(hp)}" target="_blank" rel="noopener">공식 홈페이지</a>`:""}
+      ${FOREST(p)?`<a href="${FTRIP}" target="_blank" rel="noopener">🏡 빈 방·객실 요금 (숲나들e)</a>`:""}
       ${isDated(p)?`<a href="https://search.naver.com/search.naver?query=${encodeURIComponent(p.n+" "+TODAY.getFullYear()+" 일정")}" target="_blank" rel="noopener">일정 확인</a>`
         :p.ku?`<a href="${KAKAO}${encodeURIComponent(p.ku)}" target="_blank" rel="noopener">메뉴·영업시간·후기</a>`
         :`<a href="https://map.naver.com/p/search/${encodeURIComponent(placeQ(p))}" target="_blank" rel="noopener">${p.c==="food"?"메뉴·영업시간":"운영시간·요금"}</a>`}
