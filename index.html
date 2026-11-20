@@ -193,6 +193,11 @@ select,input[type=search],input[type=date]{width:100%;border:1px solid var(--lin
 
 footer{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:16px}
 footer strong{color:var(--ink)}
+/* 왼쪽 아래 개선 의견 안내 (오른쪽 아래 코스 버튼과 안 겹치게 폭 제한) */
+.fb{position:fixed;z-index:30;left:max(10px,calc(env(safe-area-inset-left,0px) + 10px));bottom:calc(env(safe-area-inset-bottom,0px) + 8px);
+  max-width:calc(100% - 110px);font-size:11px;line-height:1.4;color:var(--muted);background:var(--surface);opacity:.92;
+  border:1px solid var(--line);border-radius:8px;padding:3px 8px}
+.fb a{color:inherit}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 </style>
 
@@ -316,6 +321,7 @@ footer strong{color:var(--ink)}
     <div id="rgAll"></div>
   </section>
 
+  <div class="fb">개선이 필요한 부분은 <a href="mailto:bigsnoop@naver.com">bigsnoop@naver.com</a> 으로 메일 보내주세요</div>
   <footer>
     <strong>아이와 함께 쌓는 작은 기억들</strong>
     <span id="src"></span>
